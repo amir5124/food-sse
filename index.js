@@ -48,7 +48,8 @@ const jagelHeaders = {
     'User-Agent': 'Mozilla/5.0',
     'Origin': 'https://app.linku.co.id',
     'Referer': 'https://app.linku.co.id/',
-    'Accept': 'application/json'
+    'Accept': 'application/json',
+    'Authorization': 'Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjBkNzE3YzM1OTgwZjQ1ZjE5Y2Y4ZWQxZTc0OTYyYmI2YzYwZWQ0N2E3M2Q2NDczZDE5YjRmZWVlOWUwNTJmMDNjMTU1YzYyNDVlYjJlMDkyIn0.eyJhdWQiOiIxIiwianRpIjoiMGQ3MTdjMzU5ODBmNDVmMTljZjhlZDFlNzQ5NjJiYjZjNjBlZDQ3YTczZDY0NzNkMTliNGZlZWU5ZTA1MmYwM2MxNTVjNjI0NWViMmUwOTIiLCJpYXQiOjE3ODEzMzgwNjYsIm5iZiI6MTc4MTMzODA2NiwiZXhwIjoxODEyODc0MDY2LCJzdWIiOiIyOTcxODQ0Iiwic2NvcGVzIjpbXX0.Q_5SkUuhpWXSWr6KSOL0aTItBi_xy04arqOynefyFzfrHggsXXQeFIc7mFCPUC8lKjDZ9I7OdLRAJPhK_uX6GRb-hD66HO-BV7tTAy8iNvj_km963scVWWpqPaEbNrsOExzXip2u5vx_rK3IchgEXVcoNWhZjiIhzD7bg5lPjWFTXy3dG1c_SSQwl9-M7rD3XYAk08c7s7WEMPYmI-83hDilXle9TUdS1xE7r4Bi9SP2zSoQ7sykv_bUXFWYx8WB--fC--fALq7XEkR-zkgAifZpP2qve153M-YsqFyE8eZTuGN19Riuj82bnA8WeYzeLgqUGoWSYMwEGKP0w-r3Kyw6JMYTj8GWsD4bmm4hdTwOJoLX7LRF3RNRtSMSIsRxWoovj-IeZHSjX6jtnPsIj3ZSlvvib6BEuswgS3MydAlgnJCey_8V77I3E_8W2ry9nQCqSeZL9VeLE4qgWbqhm3JHzxSCuoqcbHFJZHf_-svvmxL1jnrz3x3AHVKTfvXiGapElLd9v8BLYlOZU8dj4xBWcxBVA46TJY9m2YNYlmz1OtUzjl84iITROTrPrFwusP5wVG0WYiJSHzRDcozdVxJ2MjDL1J2DfElHPbqbTJ-omJHWzH6_H2PUUqW-htx28x1DrEYFta5CDYjRUM6I9Y_1q0xjjimNPi9TOApo_5k' // token lengkap
 };
 
 /** Bagi array menjadi chunk ukuran n */
@@ -174,21 +175,42 @@ async function fetchStoreProductsWithCategories(viewUid) {
 // 🔥 FUNGSI GET DISCOUNT / PROMO
 // ─────────────────────────────────────────────────────────────
 
-/** Ambil diskon/promo berdasarkan unique_id dan filter */
-async function fetchDiscounts(uniqueId, filter = 2) {
-    try {
-        if (!uniqueId) {
-            console.log('⚠️  unique_id is required for fetching discounts');
-            return null;
-        }
+// Tambah di atas server.js
+// Ganti cache sederhana dengan TTL cache
+const discountCache = {};
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 menit — sesuaikan kebutuhan
 
+async function fetchDiscounts(uniqueId, filter = 2) {
+    const cacheKey = `${uniqueId}_${filter}`;
+
+    // ✅ Cek cache + TTL
+    if (discountCache[cacheKey]) {
+        const { data, cachedAt } = discountCache[cacheKey];
+        const age = Date.now() - cachedAt;
+
+        if (age < CACHE_TTL_MS) {
+            console.log(`📦 Cache hit [${cacheKey}] — umur: ${Math.round(age / 1000)}s`);
+            return data;
+        } else {
+            console.log(`⏰ Cache expired [${cacheKey}] — umur: ${Math.round(age / 1000)}s, refetch...`);
+            delete discountCache[cacheKey];
+        }
+    }
+
+    try {
+        if (!uniqueId) return null;
         const url = `https://app.jagel.id/api/mydiscount?filter=${filter}&unique_id=${uniqueId}`;
         console.log(`🌐 Fetching discounts for unique_id=${uniqueId}, filter=${filter}`);
 
         const response = await axios.get(url, { headers: jagelHeaders });
 
-        if (response.data && response.data.success) {
-            console.log(`✅ Successfully fetched ${response.data.data?.discounts?.length || 0} discounts`);
+        if (response.data?.success) {
+            // ✅ Simpan dengan timestamp
+            discountCache[cacheKey] = {
+                data: response.data.data,
+                cachedAt: Date.now()
+            };
+            console.log(`✅ Fetched ${response.data.data?.discounts?.length || 0} discounts → cached`);
             return response.data.data;
         }
         return null;
@@ -197,6 +219,21 @@ async function fetchDiscounts(uniqueId, filter = 2) {
         return null;
     }
 }
+
+// ✅ Auto clear cache yang expired setiap 10 menit
+setInterval(() => {
+    const now = Date.now();
+    let cleared = 0;
+    Object.keys(discountCache).forEach(key => {
+        if (now - discountCache[key].cachedAt > CACHE_TTL_MS) {
+            delete discountCache[key];
+            cleared++;
+        }
+    });
+    if (cleared > 0) console.log(`🗑️ Auto clear cache: ${cleared} entries expired`);
+}, 10 * 60 * 1000);
+
+
 
 /** Ambil diskon/promo berdasarkan partner_view_uid */
 async function fetchDiscountsByPartner(partnerViewUid, filter = 2) {
@@ -1246,90 +1283,158 @@ app.get('/api/discounts/check-product/:productViewUid', async (req, res) => {
 app.get('/api/discounts/partner/:partnerViewUid', async (req, res) => {
     try {
         const { partnerViewUid } = req.params;
-        const { unique_id, filter = 2 } = req.query;
-
-        if (!partnerViewUid) {
-            return res.status(400).json({
-                success: false,
-                error: "partnerViewUid is required"
-            });
-        }
+        const { unique_id, filter = 2, include_expired = 'false' } = req.query;
 
         let discountsData = null;
-        let usedUniqueId = unique_id;
+        let usedUniqueId = unique_id || null; // ✅ fix: deklarasi di awal
 
+        console.log(`\n${'='.repeat(60)}`);
+        console.log(`🎫 [DISCOUNTS/PARTNER] Request`);
+        console.log(`   partner_view_uid : ${partnerViewUid}`);
+        console.log(`   unique_id        : ${unique_id || '(tidak ada)'}`);
+        console.log(`   filter           : ${filter}`);
+        console.log(`   include_expired  : ${include_expired}`);
+        console.log(`${'='.repeat(60)}`);
+
+        // ── STEP 1: Fetch diskon ──
         if (unique_id) {
+            console.log(`\n📡 [STEP 1] Fetch diskon via unique_id: ${unique_id}`);
             discountsData = await fetchDiscounts(unique_id, parseInt(filter));
         } else {
+            console.log(`\n📡 [STEP 1] Fetch diskon via partner_view_uid: ${partnerViewUid}`);
             discountsData = await fetchDiscountsByPartner(partnerViewUid, parseInt(filter));
-            if (discountsData && discountsData.unique_id) {
+            if (discountsData?.unique_id) {
                 usedUniqueId = discountsData.unique_id;
+                console.log(`   ✅ unique_id ditemukan dari partner: ${usedUniqueId}`);
             }
         }
 
-        // Filter diskon untuk partner tertentu
-        let partnerDiscounts = [];
-        if (discountsData && discountsData.discounts) {
-            partnerDiscounts = discountsData.discounts.filter(d =>
-                d.partner_view_uid === partnerViewUid
-            );
+        console.log(`\n📦 [STEP 1 RESULT]`);
+        console.log(`   discountsData ada : ${!!discountsData}`);
+        console.log(`   total diskon      : ${discountsData?.discounts?.length ?? 0}`);
 
-            // Filter yang masih aktif
-            const now = new Date();
-            partnerDiscounts = partnerDiscounts.filter(d => {
-                const endDate = new Date(d.end_date);
-                return endDate > now;
+        if (!discountsData) {
+            console.log(`   ⚠️ discountsData null — kemungkinan 401 atau unique_id salah`);
+            return res.json({
+                success: true,
+                data: {
+                    partner: { view_uid: partnerViewUid },
+                    user_unique_id: usedUniqueId,
+                    discounts: [],
+                    total_discounts: 0,
+                    debug: { reason: 'discountsData null' }
+                }
             });
         }
 
-        // Ambil detail partner
+        // ── STEP 2: Filter by partner_view_uid ──
+        console.log(`\n🔍 [STEP 2] Filter by partner_view_uid: ${partnerViewUid}`);
+        console.log(`   Semua partner_view_uid di diskon:`);
+        discountsData.discounts?.forEach((d, i) => {
+            const cocok = d.partner_view_uid === partnerViewUid ? '✅' : '  ';
+            console.log(`   ${cocok} [${i}] ${d.partner_view_uid} | code: ${d.code}`);
+        });
+
+        const byPartner = (discountsData.discounts || []).filter(
+            d => d.partner_view_uid === partnerViewUid
+        );
+        console.log(`\n   Cocok: ${byPartner.length} diskon`);
+
+        // ── STEP 3: Filter expired ──
+        console.log(`\n⏰ [STEP 3] Filter expired`);
+        const now = new Date();
+        console.log(`   Waktu sekarang: ${now.toISOString()}`);
+
+        const aktif = [];
+        const expired = [];
+
+        byPartner.forEach(d => {
+            const endDate = new Date(d.end_date);
+            const isAktif = endDate > now;
+            const status = isAktif ? '✅ AKTIF  ' : '❌ EXPIRED';
+            console.log(`   ${status} | code: ${d.code} | end_date: ${d.end_date}`);
+            if (isAktif) aktif.push(d);
+            else expired.push(d);
+        });
+
+        console.log(`\n   Aktif  : ${aktif.length}`);
+        console.log(`   Expired: ${expired.length}`);
+
+        // include_expired=true untuk testing
+        let partnerDiscounts = include_expired === 'true' ? byPartner : aktif;
+        console.log(`   Dipakai: ${partnerDiscounts.length} (include_expired=${include_expired})`);
+
+        // ── STEP 4: Fetch partner info ──
+        console.log(`\n👤 [STEP 4] Fetch partner info: ${partnerViewUid}`);
         let partnerInfo = null;
         try {
             const partnerUrl = `https://app.jagel.id/api/users/${partnerViewUid}?driver=1`;
             const partnerRes = await axios.get(partnerUrl, { headers: jagelHeaders });
             if (partnerRes.data.success) {
                 partnerInfo = partnerRes.data.data;
+                console.log(`   ✅ Partner: ${partnerInfo.name} (${partnerInfo.username})`);
+            } else {
+                console.log(`   ⚠️ Partner API success=false`);
             }
         } catch (err) {
-            console.log(`⚠️ Failed to fetch partner info: ${err.message}`);
+            console.log(`   ⚠️ Gagal fetch partner info: ${err.message}`);
         }
 
-        res.json({
-            success: true,
-            data: {
-                partner: partnerInfo ? {
-                    view_uid: partnerInfo.view_uid,
-                    username: partnerInfo.username,
-                    name: partnerInfo.name,
-                    phone: partnerInfo.phone,
-                    partner_commission: partnerInfo.partner_commission || 0
-                } : {
-                    view_uid: partnerViewUid
-                },
-                user_unique_id: usedUniqueId || null,
-                discounts: partnerDiscounts,
-                total_discounts: partnerDiscounts.length,
-                discount_categories: {
-                    category_0: partnerDiscounts.filter(d => d.category === 0).length,
-                    category_1: partnerDiscounts.filter(d => d.category === 1).length,
-                    category_2: partnerDiscounts.filter(d => d.category === 2).length,
-                    category_3: partnerDiscounts.filter(d => d.category === 3).length
-                }
+        // ── STEP 5: Build response ──
+        const responseData = {
+            partner: partnerInfo ? {
+                view_uid: partnerInfo.view_uid,
+                username: partnerInfo.username,
+                name: partnerInfo.name,
+                phone: partnerInfo.phone,
+                partner_commission: partnerInfo.partner_commission || 0
+            } : {
+                view_uid: partnerViewUid
+            },
+            user_unique_id: usedUniqueId,
+            discounts: partnerDiscounts,
+            total_discounts: partnerDiscounts.length,
+            discount_categories: {
+                category_0: partnerDiscounts.filter(d => d.category === 0).length,
+                category_1: partnerDiscounts.filter(d => d.category === 1).length,
+                category_2: partnerDiscounts.filter(d => d.category === 2).length,
+                category_3: partnerDiscounts.filter(d => d.category === 3).length
+            },
+            // ✅ debug info — bisa dihapus saat production
+            _debug: {
+                total_dari_api: discountsData.discounts?.length ?? 0,
+                cocok_partner: byPartner.length,
+                aktif: aktif.length,
+                expired: expired.length,
+                include_expired: include_expired === 'true',
+                waktu_server: now.toISOString()
             }
-        });
+        };
+
+        console.log(`\n✅ [STEP 5] Response siap`);
+        console.log(`   total_discounts : ${responseData.total_discounts}`);
+        console.log(`${'='.repeat(60)}\n`);
+
+        res.json({ success: true, data: responseData });
 
     } catch (err) {
-        console.error('❌ [DISCOUNTS/PARTNER] Error:', err.message);
-        res.status(500).json({
-            success: false,
-            error: err.message
-        });
+        console.error(`\n❌ [DISCOUNTS/PARTNER] Error: ${err.message}`);
+        console.error(err.stack);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
 // ─────────────────────────────────────────────────────────────
 // START SERVER
 // ─────────────────────────────────────────────────────────────
+
+// Tambah di server.js
+app.get('/api/cache/clear', (req, res) => {
+    const before = Object.keys(discountCache).length;
+    Object.keys(discountCache).forEach(k => delete discountCache[k]);
+    console.log(`🗑️ Cache cleared: ${before} entries`);
+    res.json({ success: true, message: `Cache cleared: ${before} entries` });
+});
 app.listen(PORT, () => {
     console.log(`\n🚀 UFood Server berjalan di port ${PORT}`);
     console.log(`\n━━━ SSE ENDPOINTS (batch ${BATCH_SIZE} toko) ━━━━━━━━━━━━━━━━━━━━━━━━━━`);
