@@ -706,11 +706,31 @@ app.get('/api/store/:viewUid', async (req, res) => {
 // JSON: /api/store/:viewUid/products?lat=&lng=
 // ─────────────────────────────────────────────────────────────
 app.get('/api/store/:viewUid/products', async (req, res) => {
-    try {
-        const { viewUid } = req.params;
-        const userCoords = parseUserCoords(req.query);
+    const { viewUid } = req.params;
+    const userCoords = parseUserCoords(req.query);
 
-        console.log(`📦 [store-products] store=${viewUid}`);
+    // Setup SSE headers
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no' // biar nginx ga buffer
+    });
+
+    const send = (event, data) => {
+        res.write(`event: ${event}\n`);
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    // kirim heartbeat biar koneksi ga ke-close proxy/load balancer
+    const heartbeat = setInterval(() => res.write(': ping\n\n'), 15000);
+
+    req.on('close', () => {
+        clearInterval(heartbeat);
+    });
+
+    try {
+        console.log(`📦 [store-products-stream] store=${viewUid}`);
 
         const [detail, categories] = await Promise.all([
             fetchStoreDetail(viewUid),
@@ -722,101 +742,131 @@ app.get('/api/store/:viewUid/products', async (req, res) => {
                 parseFloat(detail.origin_lat), parseFloat(detail.origin_lng))
             : null;
 
-        const allProducts = [];
+        const storeInfo = {
+            view_uid: detail.view_uid,
+            title: detail.title,
+            image: detail.image,
+            origin_address: detail.origin_address || '',
+            origin_lat: detail.origin_lat,
+            origin_lng: detail.origin_lng,
+            is_open: detail.is_open === 1,
+            seller_rating: detail.seller_rating,
+            partner_view_uid: detail.partner_view_uid || null
+        };
 
-        for (const category of categories) {
-            const products = await fetchCategoryProducts(category.view_uid);
-            products.forEach(p => {
-                let variants = [];
-                let displayPrice = p.price || 0;
-                if (p.list_product_variant && p.list_product_variant.length > 0) {
-                    variants = p.list_product_variant.map(v => ({
-                        view_uid: v.view_uid,
-                        name: v.name,
-                        price: v.price || v.new_price || 0
-                    }));
-                    displayPrice = Math.min(...variants.map(v => v.price), displayPrice);
-                }
-                allProducts.push({
-                    view_uid: p.view_uid,
-                    title: p.title,
-                    image: p.image,
-                    price: displayPrice,
-                    original_price: p.price_before_discount || p.price,
-                    content: p.content || '',
-                    product_category: category.title,
-                    has_variants: variants.length > 0,
-                    variants,
-                    store_view_uid: detail.view_uid,
-                    store_title: detail.title,
-                    store_distance: distance,
-                    store_is_open: detail.is_open === 1,
-                    is_open: p.is_open === 1,
-                    max_qty: p.max_qty,
-                    partner_view_uid: detail.partner_view_uid || null
-                });
-            });
-            if (products.length > 0) console.log(`   - ${category.title}: ${products.length} produk`);
-        }
-
-        // Fallback jika tidak ada kategori
-        if (categories.length === 0) {
-            const direct = await fetchCategoryProducts(viewUid);
-            direct.forEach(p => {
-                allProducts.push({
-                    view_uid: p.view_uid,
-                    title: p.title,
-                    image: p.image,
-                    price: p.price || 0,
-                    original_price: p.price_before_discount || p.price,
-                    content: p.content || '',
-                    product_category: 'Menu Utama',
-                    has_variants: false,
-                    variants: [],
-                    store_view_uid: detail.view_uid,
-                    store_title: detail.title,
-                    store_distance: distance,
-                    store_is_open: detail.is_open === 1,
-                    is_open: p.is_open === 1,
-                    max_qty: p.max_qty,
-                    partner_view_uid: detail.partner_view_uid || null
-                });
-            });
-        }
-
-        // Kelompokkan per kategori
-        const byCategory = {};
-        allProducts.forEach(p => {
-            if (!byCategory[p.product_category]) byCategory[p.product_category] = [];
-            byCategory[p.product_category].push(p);
-        });
-        const categoriesResult = Object.keys(byCategory).map(name => ({
-            name, products: byCategory[name], count: byCategory[name].length
-        }));
-
-        res.json({
-            success: true,
-            store: {
-                view_uid: detail.view_uid,
-                title: detail.title,
-                image: detail.image,
-                origin_address: detail.origin_address || '',
-                origin_lat: detail.origin_lat,
-                origin_lng: detail.origin_lng,
-                is_open: detail.is_open === 1,
-                seller_rating: detail.seller_rating,
-                partner_view_uid: detail.partner_view_uid || null
-            },
-            products: allProducts,
-            categories: categoriesResult,
-            total_products: allProducts.length,
-            total_categories: categoriesResult.length,
+        // kirim info store + total kategori duluan, biar client bisa render skeleton
+        send('store_info', {
+            store: storeInfo,
+            total_categories: categories.length,
             userCoords
         });
 
+        const mapProduct = (p, categoryTitle) => {
+            let variants = [];
+            let displayPrice = p.price || 0;
+            if (p.list_product_variant && p.list_product_variant.length > 0) {
+                variants = p.list_product_variant.map(v => ({
+                    view_uid: v.view_uid,
+                    name: v.name,
+                    price: v.price || v.new_price || 0
+                }));
+                displayPrice = Math.min(...variants.map(v => v.price), displayPrice);
+            }
+            return {
+                view_uid: p.view_uid,
+                title: p.title,
+                image: p.image,
+                price: displayPrice,
+                original_price: p.price_before_discount || p.price,
+                content: p.content || '',
+                product_category: categoryTitle,
+                has_variants: variants.length > 0,
+                variants,
+                store_view_uid: detail.view_uid,
+                store_title: detail.title,
+                store_distance: distance,
+                store_is_open: detail.is_open === 1,
+                is_open: p.is_open === 1,
+                max_qty: p.max_qty,
+                partner_view_uid: detail.partner_view_uid || null
+            };
+        };
+
+        let allProducts = [];
+        let totalCategoriesSent = 0;
+
+        // Fallback kalau tidak ada kategori sama sekali
+        if (categories.length === 0) {
+            const direct = await fetchCategoryProducts(viewUid);
+            const mapped = direct.map(p => mapProduct(p, 'Menu Utama'));
+            allProducts = mapped;
+
+            send('batch', {
+                categories: [{
+                    name: 'Menu Utama',
+                    products: mapped,
+                    count: mapped.length
+                }],
+                batch_index: 0,
+                is_last: true
+            });
+
+            send('done', {
+                total_products: allProducts.length,
+                total_categories: 1
+            });
+            clearInterval(heartbeat);
+            res.end();
+            return;
+        }
+
+        // Proses tiap kategori secara berurutan, tapi kirim per batch 3 kategori
+        const BATCH_SIZE = 3;
+        let buffer = []; // buffer kategori yg sudah siap kirim
+        let batchIndex = 0;
+
+        for (let i = 0; i < categories.length; i++) {
+            const category = categories[i];
+            const rawProducts = await fetchCategoryProducts(category.view_uid);
+
+            if (rawProducts.length > 0) {
+                console.log(`   - ${category.title}: ${rawProducts.length} produk`);
+                const mapped = rawProducts.map(p => mapProduct(p, category.title));
+                allProducts.push(...mapped);
+
+                buffer.push({
+                    name: category.title,
+                    products: mapped,
+                    count: mapped.length
+                });
+            }
+
+            const isLastCategory = i === categories.length - 1;
+
+            // begitu buffer udah 3 kategori ATAU ini kategori terakhir, langsung flush
+            if (buffer.length >= BATCH_SIZE || (isLastCategory && buffer.length > 0)) {
+                send('batch', {
+                    categories: buffer,
+                    batch_index: batchIndex++,
+                    is_last: isLastCategory
+                });
+                buffer = [];
+            }
+        }
+
+        send('done', {
+            total_products: allProducts.length,
+            total_categories: categories.length
+        });
+
+        clearInterval(heartbeat);
+        res.end();
+
     } catch (err) {
-        console.error('❌ [store-products]', err.message);
-        res.status(500).json({ success: false, error: err.message });
+        console.error('❌ [store-products-stream]', err.message);
+        send('error', { success: false, error: err.message });
+        clearInterval(heartbeat);
+        res.end();
     }
 });
 
