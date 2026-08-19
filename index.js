@@ -14,7 +14,7 @@ app.use(express.static('public'));
 // ─────────────────────────────────────────────────────────────
 const UWARUNG_COMPONENT_UID = '618b7f0c383e4';  // UWarung - daftar toko
 const MAKANAN_COMPONENT_UID = '618637dbc8415';  // Jastip Makanan - daftar toko
-const RENTAL_COMPONENT_UID = '64c4cfdedae68';   // Rental - daftar toko rental
+const RENTAL_COMPONENT_UID = '6a859e9887f7e';   // Rental - daftar toko rental
 const CODENAME = 'iknlinku';
 const BATCH_SIZE = 3; // jumlah toko per batch SSE
 
