@@ -15,6 +15,7 @@ app.use(express.static('public'));
 const UWARUNG_COMPONENT_UID = '618b7f0c383e4';  // UWarung - daftar toko
 const MAKANAN_COMPONENT_UID = '618637dbc8415';  // Jastip Makanan - daftar toko
 const RENTAL_COMPONENT_UID = '6a859e9887f7e';   // Rental - daftar toko rental
+const CARTERAN_COMPONENT_UID = '6a861898ae6a5';  // Carteran - daftar toko carteran
 const CODENAME = 'iknlinku';
 const BATCH_SIZE = 3; // jumlah toko per batch SSE
 
@@ -61,7 +62,7 @@ function chunk(arr, n) {
 }
 
 /** Sumber toko yang valid */
-const VALID_SOURCES = ['uwarung', 'makanan', 'rental'];
+const VALID_SOURCES = ['uwarung', 'makanan', 'rental', 'carteran'];
 
 /** Normalisasi query source -> salah satu dari VALID_SOURCES (default uwarung) */
 function normalizeSource(source) {
@@ -73,6 +74,7 @@ function resolveComponentUid(source) {
     switch (source) {
         case 'makanan': return MAKANAN_COMPONENT_UID;
         case 'rental': return RENTAL_COMPONENT_UID;
+        case 'carteran': return CARTERAN_COMPONENT_UID;
         default: return UWARUNG_COMPONENT_UID;
     }
 }
@@ -1121,7 +1123,8 @@ app.get('/api/discounts', async (req, res) => {
             const uwarungStores = await fetchAllStoresFromComponent(UWARUNG_COMPONENT_UID);
             const makananStores = await fetchAllStoresFromComponent(MAKANAN_COMPONENT_UID);
             const rentalStores = await fetchAllStoresFromComponent(RENTAL_COMPONENT_UID);
-            const allStores = [...uwarungStores, ...makananStores, ...rentalStores];
+            const carteranStores = await fetchAllStoresFromComponent(CARTERAN_COMPONENT_UID);
+            const allStores = [...uwarungStores, ...makananStores, ...rentalStores, ...carteranStores];
 
             // Buat mapping store berdasarkan view_uid
             const storeMap = {};
