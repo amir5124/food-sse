@@ -14,6 +14,7 @@ app.use(express.static('public'));
 // ─────────────────────────────────────────────────────────────
 const UWARUNG_COMPONENT_UID = '618b7f0c383e4';  // UWarung - daftar toko
 const MAKANAN_COMPONENT_UID = '618637dbc8415';  // Jastip Makanan - daftar toko
+const RENTAL_COMPONENT_UID = '64c4cfdedae68';   // Rental - daftar toko rental
 const CODENAME = 'iknlinku';
 const BATCH_SIZE = 3; // jumlah toko per batch SSE
 
@@ -57,6 +58,23 @@ function chunk(arr, n) {
     const result = [];
     for (let i = 0; i < arr.length; i += n) result.push(arr.slice(i, i + n));
     return result;
+}
+
+/** Sumber toko yang valid */
+const VALID_SOURCES = ['uwarung', 'makanan', 'rental'];
+
+/** Normalisasi query source -> salah satu dari VALID_SOURCES (default uwarung) */
+function normalizeSource(source) {
+    return VALID_SOURCES.includes(source) ? source : 'uwarung';
+}
+
+/** Resolve source -> component_uid */
+function resolveComponentUid(source) {
+    switch (source) {
+        case 'makanan': return MAKANAN_COMPONENT_UID;
+        case 'rental': return RENTAL_COMPONENT_UID;
+        default: return UWARUNG_COMPONENT_UID;
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -120,12 +138,17 @@ async function fetchStoreCategories(viewUid) {
     return allCategories;
 }
 
-/** Ambil semua produk dari suatu kategori (type=0 atau purchasable=1) */
+/** Ambil semua produk dari suatu kategori (type=0/1 atau purchasable=1) */
 async function fetchCategoryProducts(categoryUid) {
     let allProducts = [], page = 1, lastPage = 1;
     do {
         const { items, lastPage: lp } = await fetchChildren(categoryUid, page, 100);
-        allProducts.push(...items.filter(item => item.type === 0 || item.purchasable === 1));
+        // type 0  = produk umum (uwarung/makanan)
+        // type 1  = unit rental (mobil, dll)
+        // purchasable === 1 = fallback jika type lain tapi tetap bisa dibeli
+        allProducts.push(...items.filter(item =>
+            item.type === 0 || item.type === 1 || item.purchasable === 1
+        ));
         lastPage = lp;
         page++;
     } while (page <= lastPage);
@@ -151,6 +174,7 @@ async function fetchStoreProductsWithCategories(viewUid) {
         }
 
         // Jika tidak ada kategori, coba langsung dari toko
+        // (kasus rental: children toko langsung berupa unit/produk, bukan kategori)
         if (categories.length === 0) {
             console.log(`   ⚠️ Tidak ada kategori, ambil produk langsung dari toko...`);
             const direct = await fetchCategoryProducts(viewUid);
@@ -360,26 +384,40 @@ async function processBatchProducts(storeList, userCoords) {
 
             const products = await fetchStoreProductsWithCategories(store.view_uid);
 
-            const productList = products.map(p => ({
-                product_view_uid: p.view_uid,
-                product_title: p.title,
-                product_image: p.image,
-                product_price: p.price || 0,
-                product_content: p.content || '',
-                product_category: p.category_name || '',
-                product_has_variants: !!(p.list_product_variant && p.list_product_variant.length > 0),
-                store_view_uid: store.view_uid,
-                store_title: store.title,
-                store_image: store.image,
-                store_origin_address: detail.origin_address || '',
-                store_origin_lat: detail.origin_lat,
-                store_origin_lng: detail.origin_lng,
-                store_distance: distance,
-                store_rating: detail.seller_rating,
-                store_is_open: detail.is_open,
-                link_view: store.link_view,
-                partner_view_uid: detail.partner_view_uid || null
-            }));
+            const productList = products.map(p => {
+                let variants = [];
+                let displayPrice = p.price || 0;
+                if (p.list_product_variant && p.list_product_variant.length > 0) {
+                    variants = p.list_product_variant.map(v => ({
+                        view_uid: v.view_uid,
+                        name: v.name,
+                        price: v.price || v.new_price || 0
+                    }));
+                    displayPrice = Math.min(...variants.map(v => v.price), displayPrice);
+                }
+
+                return {
+                    product_view_uid: p.view_uid,
+                    product_title: p.title,
+                    product_image: p.image,
+                    product_price: displayPrice,
+                    product_content: p.content || '',
+                    product_category: p.category_name || '',
+                    product_has_variants: variants.length > 0,
+                    product_variants: variants,
+                    store_view_uid: store.view_uid,
+                    store_title: store.title,
+                    store_image: store.image,
+                    store_origin_address: detail.origin_address || '',
+                    store_origin_lat: detail.origin_lat,
+                    store_origin_lng: detail.origin_lng,
+                    store_distance: distance,
+                    store_rating: detail.seller_rating,
+                    store_is_open: detail.is_open,
+                    link_view: store.link_view,
+                    partner_view_uid: detail.partner_view_uid || null
+                };
+            });
 
             return { ok: true, store_title: store.title, data: productList, count: productList.length };
         } catch (err) {
@@ -406,7 +444,7 @@ function setupSSE(res) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// SSE: /api/stores-stream?source=uwarung|makanan&lat=&lng=
+// SSE: /api/stores-stream?source=uwarung|makanan|rental&lat=&lng=
 // ─────────────────────────────────────────────────────────────
 app.get('/api/stores-stream', async (req, res) => {
     const send = setupSSE(res);
@@ -414,8 +452,8 @@ app.get('/api/stores-stream', async (req, res) => {
 
     try {
         const userCoords = parseUserCoords(req.query);
-        const source = req.query.source === 'makanan' ? 'makanan' : 'uwarung';
-        const uid = source === 'makanan' ? MAKANAN_COMPONENT_UID : UWARUNG_COMPONENT_UID;
+        const source = normalizeSource(req.query.source);
+        const uid = resolveComponentUid(source);
 
         console.log(`📡 [stores-stream] source=${source}`);
 
@@ -470,7 +508,7 @@ app.get('/api/stores-stream', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// SSE: /api/products-stream?source=uwarung|makanan&lat=&lng=
+// SSE: /api/products-stream?source=uwarung|makanan|rental&lat=&lng=
 // ─────────────────────────────────────────────────────────────
 app.get('/api/products-stream', async (req, res) => {
     const send = setupSSE(res);
@@ -478,8 +516,8 @@ app.get('/api/products-stream', async (req, res) => {
 
     try {
         const userCoords = parseUserCoords(req.query);
-        const source = req.query.source === 'makanan' ? 'makanan' : 'uwarung';
-        const uid = source === 'makanan' ? MAKANAN_COMPONENT_UID : UWARUNG_COMPONENT_UID;
+        const source = normalizeSource(req.query.source);
+        const uid = resolveComponentUid(source);
 
         console.log(`📡 [products-stream] source=${source} koordinat: ${userCoords.lat}, ${userCoords.lng}`);
 
@@ -569,6 +607,53 @@ app.get('/api/store/:viewUid/menu-stream', async (req, res) => {
 
         let totalProducts = 0;
 
+        // Fallback: toko rental biasanya tidak punya kategori (type=4),
+        // children-nya langsung berupa unit/produk (type=1, purchasable=1)
+        if (categories.length === 0) {
+            console.log(`   ⚠️ Tidak ada kategori, ambil produk langsung dari toko...`);
+            const products = await fetchCategoryProducts(viewUid);
+
+            const distance = (storeDetail.origin_lat && storeDetail.origin_lng)
+                ? getDistance(userCoords.lat, userCoords.lng,
+                    parseFloat(storeDetail.origin_lat), parseFloat(storeDetail.origin_lng))
+                : null;
+
+            const formatted = products.map(p => ({
+                view_uid: p.view_uid,
+                title: p.title,
+                image: p.image,
+                price: p.price || 0,
+                content: p.content || '',
+                category_name: 'Menu Utama',
+                store_distance: distance,
+                has_variants: !!(p.list_product_variant && p.list_product_variant.length > 0),
+                variants: p.list_product_variant || []
+            }));
+
+            totalProducts = formatted.length;
+
+            send('category', {
+                category_index: 1,
+                total_categories: 1,
+                category: {
+                    view_uid: 'main',
+                    title: 'Menu Utama',
+                    products: formatted
+                }
+            });
+
+            send('progress', {
+                percent: 100,
+                current: 1,
+                total: 1,
+                products_loaded: totalProducts
+            });
+
+            send('done', { total_categories: 1, total_products: totalProducts });
+            res.end();
+            return;
+        }
+
         for (let i = 0; i < categories.length; i++) {
             const category = categories[i];
             const products = await fetchCategoryProducts(category.view_uid);
@@ -624,13 +709,13 @@ app.get('/api/store/:viewUid/menu-stream', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// JSON: /api/stores?source=uwarung|makanan&lat=&lng=
+// JSON: /api/stores?source=uwarung|makanan|rental&lat=&lng=
 // ─────────────────────────────────────────────────────────────
 app.get('/api/stores', async (req, res) => {
     try {
         const userCoords = parseUserCoords(req.query);
-        const source = req.query.source === 'makanan' ? 'makanan' : 'uwarung';
-        const uid = source === 'makanan' ? MAKANAN_COMPONENT_UID : UWARUNG_COMPONENT_UID;
+        const source = normalizeSource(req.query.source);
+        const uid = resolveComponentUid(source);
 
         const stores = await fetchAllStoresFromComponent(uid);
         const results = await processBatchStores(stores, userCoords);
@@ -644,13 +729,13 @@ app.get('/api/stores', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// JSON: /api/products?source=uwarung|makanan&lat=&lng=
+// JSON: /api/products?source=uwarung|makanan|rental&lat=&lng=
 // ─────────────────────────────────────────────────────────────
 app.get('/api/products', async (req, res) => {
     try {
         const userCoords = parseUserCoords(req.query);
-        const source = req.query.source === 'makanan' ? 'makanan' : 'uwarung';
-        const uid = source === 'makanan' ? MAKANAN_COMPONENT_UID : UWARUNG_COMPONENT_UID;
+        const source = normalizeSource(req.query.source);
+        const uid = resolveComponentUid(source);
 
         const stores = await fetchAllStoresFromComponent(uid);
         const results = await processBatchProducts(stores, userCoords);
@@ -793,9 +878,9 @@ app.get('/api/store/:viewUid/products', async (req, res) => {
         };
 
         let allProducts = [];
-        let totalCategoriesSent = 0;
 
         // Fallback kalau tidak ada kategori sama sekali
+        // (kasus toko rental — children langsung berupa unit mobil)
         if (categories.length === 0) {
             const direct = await fetchCategoryProducts(viewUid);
             const mapped = direct.map(p => mapProduct(p, 'Menu Utama'));
@@ -1027,16 +1112,16 @@ app.get('/api/discounts', async (req, res) => {
         }
 
         // Jika include_products = true, cari produk yang memiliki diskon
-        let productsWithDiscounts = [];
         let matchedProducts = [];
 
         if (include_products === 'true' || product_view_uid) {
             console.log(`🔍 Fetching products with discounts...`);
 
-            // Ambil semua toko dari kedua component
+            // Ambil semua toko dari ketiga component (uwarung, makanan, rental)
             const uwarungStores = await fetchAllStoresFromComponent(UWARUNG_COMPONENT_UID);
             const makananStores = await fetchAllStoresFromComponent(MAKANAN_COMPONENT_UID);
-            const allStores = [...uwarungStores, ...makananStores];
+            const rentalStores = await fetchAllStoresFromComponent(RENTAL_COMPONENT_UID);
+            const allStores = [...uwarungStores, ...makananStores, ...rentalStores];
 
             // Buat mapping store berdasarkan view_uid
             const storeMap = {};
@@ -1082,7 +1167,6 @@ app.get('/api/discounts', async (req, res) => {
                         const productRes = await axios.get(productUrl, { headers: jagelHeaders });
                         if (productRes.data.success) {
                             const product = productRes.data.data;
-                            const storeDetail = await fetchStoreDetail(storeUid);
 
                             // Cek apakah produk ini punya diskon
                             let productDiscounts = [];
@@ -1485,19 +1569,25 @@ app.get('/api/cache/clear', (req, res) => {
     console.log(`🗑️ Cache cleared: ${before} entries`);
     res.json({ success: true, message: `Cache cleared: ${before} entries` });
 });
+
 app.listen(PORT, () => {
     console.log(`\n🚀 UFood Server berjalan di port ${PORT}`);
     console.log(`\n━━━ SSE ENDPOINTS (batch ${BATCH_SIZE} toko) ━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`  📡 Stream Toko     : GET /api/stores-stream?source=uwarung|makanan&lat=&lng=`);
-    console.log(`  📡 Stream Produk   : GET /api/products-stream?source=uwarung|makanan&lat=&lng=`);
+    console.log(`  📡 Stream Toko     : GET /api/stores-stream?source=uwarung|makanan|rental&lat=&lng=`);
+    console.log(`  📡 Stream Produk   : GET /api/products-stream?source=uwarung|makanan|rental&lat=&lng=`);
     console.log(`  📡 Stream Menu     : GET /api/store/:viewUid/menu-stream?lat=&lng=`);
     console.log(`\n━━━ JSON ENDPOINTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`  🏪 Daftar Toko     : GET /api/stores?source=uwarung|makanan&lat=&lng=`);
-    console.log(`  🛍️  Daftar Produk  : GET /api/products?source=uwarung|makanan&lat=&lng=`);
+    console.log(`  🏪 Daftar Toko     : GET /api/stores?source=uwarung|makanan|rental&lat=&lng=`);
+    console.log(`  🛍️  Daftar Produk  : GET /api/products?source=uwarung|makanan|rental&lat=&lng=`);
     console.log(`  🏪 Detail Toko     : GET /api/store/:viewUid`);
     console.log(`  🍽️  Produk Toko    : GET /api/store/:viewUid/products?lat=&lng=`);
     console.log(`  📄 Info Produk     : GET /api/product/:viewUid`);
     console.log(`  ⭐ Ulasan Produk   : GET /api/product/:viewUid/reviews`);
+    console.log(`\n━━━ RENTAL SOURCE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`  🚗 Daftar Toko Rental  : GET /api/stores?source=rental&lat=&lng=`);
+    console.log(`  🚗 Daftar Unit Rental  : GET /api/products?source=rental&lat=&lng=`);
+    console.log(`  🚗 Stream Toko Rental  : GET /api/stores-stream?source=rental&lat=&lng=`);
+    console.log(`  🚗 Stream Unit Rental  : GET /api/products-stream?source=rental&lat=&lng=`);
     console.log(`\n━━━ DISCOUNT / PROMO ENDPOINTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`  🎫 Daftar Diskon   : GET /api/discounts?unique_id=...&filter=...`);
     console.log(`  🎫 Diskon Partner  : GET /api/discounts/partner/:partnerViewUid?unique_id=...`);
