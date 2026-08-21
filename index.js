@@ -1562,6 +1562,261 @@ app.get('/api/discounts/partner/:partnerViewUid', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// ENDPOINT JSON: GET /api/uwarung/products/:storeUid
+// ─────────────────────────────────────────────────────────────
+app.get('/api/uwarung/products/:storeUid', async (req, res) => {
+    try {
+        const { storeUid } = req.params;
+        const userCoords = parseUserCoords(req.query);
+        const { view_uid } = req.query;
+
+        console.log(`📦 [uwarung/products] store=${storeUid}, partner_view_uid=${view_uid}`);
+
+        let partnerInfo = null;
+
+        if (view_uid) {
+            partnerInfo = await getPartnerDetailByViewUid(view_uid);
+            if (partnerInfo) {
+                console.log(`✅ Partner found: ${partnerInfo.username} (${partnerInfo.partner_commission}%)`);
+            } else {
+                console.log(`⚠️ No partner found for view_uid: ${view_uid}`);
+            }
+        }
+
+        const [storeDetail, categories, rawProducts] = await Promise.all([
+            fetchStoreDetail(storeUid),
+            fetchStoreCategories(storeUid),
+            fetchStoreProductsWithCategories(storeUid)
+        ]);
+
+        const products = rawProducts.map(product =>
+            formatProductWithCommission(product, storeDetail, userCoords, partnerInfo)
+        );
+
+        const productsByCategory = {};
+        products.forEach(p => {
+            const cat = p.category_name;
+            if (!productsByCategory[cat]) productsByCategory[cat] = [];
+            productsByCategory[cat].push(p);
+        });
+
+        const categoriesResult = Object.keys(productsByCategory).map(catName => ({
+            name: catName,
+            products: productsByCategory[catName],
+            count: productsByCategory[catName].length
+        }));
+
+        res.json({
+            success: true,
+            store: {
+                view_uid: storeDetail.view_uid,
+                title: storeDetail.title,
+                image: storeDetail.image,
+                origin_address: storeDetail.origin_address,
+                origin_lat: storeDetail.origin_lat,
+                origin_lng: storeDetail.origin_lng,
+                is_open: storeDetail.is_open === 1,
+                seller_rating: storeDetail.seller_rating,
+                user_phone: storeDetail.user_phone || null,
+                partner_view_uid: storeDetail.partner_view_uid || null,
+                app_name: storeDetail.app_name || null
+            },
+            partner_info: partnerInfo ? {
+                view_uid: partnerInfo.view_uid,
+                username: partnerInfo.username,
+                phone: partnerInfo.phone,
+                name: partnerInfo.name,
+                partner_commission: partnerInfo.partner_commission
+            } : null,
+            products: products,
+            categories: categoriesResult,
+            total_products: products.length,
+            total_categories: categoriesResult.length,
+            userCoords
+        });
+
+    } catch (err) {
+        console.error('❌ [uwarung/products]', err.message);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────
+// SSE: /api/uwarung/stores-stream
+// ─────────────────────────────────────────────────────────────
+app.get('/api/uwarung/stores-stream', async (req, res) => {
+    let isClosed = false;
+    let heartbeatInterval = null;
+
+    const send = (event, data) => {
+        if (isClosed || res.writableEnded || res.finished) return;
+        try {
+            res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+            if (typeof res.flush === 'function') res.flush();
+        } catch (err) {
+            console.error(`SSE write error (${event}):`, err.message);
+            isClosed = true;
+        }
+    };
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.flushHeaders();
+
+    res.on('error', (err) => {
+        console.log(`💥 SSE Response error: ${err.message}`);
+        isClosed = true;
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+    });
+
+    heartbeatInterval = setInterval(() => {
+        if (!isClosed && !res.writableEnded && !res.finished) {
+            try {
+                res.write(`: heartbeat ${Date.now()}\n\n`);
+                if (typeof res.flush === 'function') res.flush();
+            } catch (err) {
+                console.log('Heartbeat failed, cleaning up');
+                clearInterval(heartbeatInterval);
+                isClosed = true;
+                if (!res.writableEnded) res.end();
+            }
+        } else {
+            clearInterval(heartbeatInterval);
+        }
+    }, 15000);
+
+    req.on('close', () => {
+        console.log('Client disconnected from uwarung stores-stream');
+        isClosed = true;
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        if (!res.writableEnded) res.end();
+    });
+
+    req.setTimeout(120000, () => {
+        console.log('Request timeout, closing SSE');
+        isClosed = true;
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        if (!res.writableEnded) res.end();
+    });
+
+    try {
+        const userCoords = parseUserCoords(req.query);
+        console.log(`📡 [uwarung/stores-stream] lat=${userCoords.lat}, lng=${userCoords.lng}`);
+
+        send('meta', { status: 'starting', userCoords });
+
+        const stores = await fetchAllStoresFromComponent(UWARUNG_COMPONENT_UID);
+
+        if (isClosed) return;
+
+        const batches = chunk(stores, BATCH_SIZE);
+
+        send('meta', {
+            total_stores: stores.length,
+            total_batches: batches.length,
+            batch_size: BATCH_SIZE,
+            source: 'uwarung',
+            userCoords
+        });
+
+        let processedCount = 0;
+
+        for (let bi = 0; bi < batches.length; bi++) {
+            if (isClosed) break;
+
+            const batch = batches[bi];
+
+            const batchPromise = Promise.all(batch.map(async (store) => {
+                if (isClosed) return null;
+
+                try {
+                    const detail = await fetchStoreDetail(store.view_uid);
+                    const distance = (detail.origin_lat && detail.origin_lng)
+                        ? getDistance(userCoords.lat, userCoords.lng,
+                            parseFloat(detail.origin_lat), parseFloat(detail.origin_lng))
+                        : null;
+
+                    return {
+                        ok: true,
+                        data: {
+                            view_uid: store.view_uid,
+                            title: store.title,
+                            image: store.image,
+                            is_open: detail.is_open === 1,
+                            close_status: detail.close_status || '',
+                            close_time: detail.close_time || '',
+                            origin_address: detail.origin_address || '',
+                            origin_lat: detail.origin_lat,
+                            origin_lng: detail.origin_lng,
+                            distance: distance,
+                            seller_rating: detail.seller_rating,
+                            user_phone: detail.user_phone || null,
+                            partner_view_uid: detail.partner_view_uid || null,
+                            app_name: detail.app_name || null
+                        }
+                    };
+                } catch (err) {
+                    return { ok: false, store_title: store.title, error: err.message };
+                }
+            }));
+
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Batch timeout')), 30000)
+            );
+
+            const results = await Promise.race([batchPromise, timeoutPromise]).catch(err => {
+                console.error(`Batch ${bi + 1} timeout:`, err.message);
+                return batch.map(() => ({ ok: false, error: 'Batch timeout' }));
+            });
+
+            if (isClosed) break;
+
+            const successItems = results.filter(r => r && r.ok).map(r => r.data);
+            const failedItems = results.filter(r => r && !r.ok);
+
+            if (successItems.length > 0) {
+                send('batch_stores', {
+                    batch_index: bi + 1,
+                    total_batches: batches.length,
+                    stores: successItems
+                });
+            }
+
+            failedItems.forEach(f => {
+                if (f) send('error_store', { store_name: f.store_title, error: f.error });
+            });
+
+            processedCount += batch.length;
+            send('progress', {
+                processed_stores: processedCount,
+                total_stores: stores.length,
+                percent: Math.round((processedCount / stores.length) * 100)
+            });
+
+            if (bi < batches.length - 1 && !isClosed) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+
+        if (!isClosed) {
+            send('done', { total_stores: stores.length, source: 'uwarung' });
+        }
+
+    } catch (err) {
+        console.error('❌ [uwarung/stores-stream]', err.message);
+        if (!isClosed) {
+            send('error', { message: err.message });
+        }
+    } finally {
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        if (!res.writableEnded) res.end();
+    }
+});
+
+// ─────────────────────────────────────────────────────────────
 // START SERVER
 // ─────────────────────────────────────────────────────────────
 
