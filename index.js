@@ -16,6 +16,7 @@ const UWARUNG_COMPONENT_UID = '618b7f0c383e4';  // UWarung - daftar toko
 const MAKANAN_COMPONENT_UID = '618637dbc8415';  // Jastip Makanan - daftar toko
 const RENTAL_COMPONENT_UID = '6a859e9887f7e';   // Rental - daftar toko rental
 const CARTERAN_COMPONENT_UID = '6a861898ae6a5';  // Carteran - daftar toko carteran
+const PENGINAPAN_COMPONENT_UID = '6a8964a0debde';
 const CODENAME = 'iknlinku';
 const BATCH_SIZE = 3; // jumlah toko per batch SSE
 
@@ -75,6 +76,7 @@ function resolveComponentUid(source) {
         case 'makanan': return MAKANAN_COMPONENT_UID;
         case 'rental': return RENTAL_COMPONENT_UID;
         case 'carteran': return CARTERAN_COMPONENT_UID;
+        case 'penginapan': return PENGINAPAN_COMPONENT_UID;
         default: return UWARUNG_COMPONENT_UID;
     }
 }
@@ -1120,11 +1122,12 @@ app.get('/api/discounts', async (req, res) => {
             console.log(`🔍 Fetching products with discounts...`);
 
             // Ambil semua toko dari ketiga component (uwarung, makanan, rental)
-            const uwarungStores = await fetchAllStoresFromComponent(UWARUNG_COMPONENT_UID);
-            const makananStores = await fetchAllStoresFromComponent(MAKANAN_COMPONENT_UID);
-            const rentalStores = await fetchAllStoresFromComponent(RENTAL_COMPONENT_UID);
-            const carteranStores = await fetchAllStoresFromComponent(CARTERAN_COMPONENT_UID);
-            const allStores = [...uwarungStores, ...makananStores, ...rentalStores, ...carteranStores];
+        const uwarungStores = await fetchAllStoresFromComponent(UWARUNG_COMPONENT_UID);
+const makananStores = await fetchAllStoresFromComponent(MAKANAN_COMPONENT_UID);
+const rentalStores = await fetchAllStoresFromComponent(RENTAL_COMPONENT_UID);
+const carteranStores = await fetchAllStoresFromComponent(CARTERAN_COMPONENT_UID);
+const penginapanStores = await fetchAllStoresFromComponent(PENGINAPAN_COMPONENT_UID);
+const allStores = [...uwarungStores, ...makananStores, ...rentalStores, ...carteranStores, ...penginapanStores];
 
             // Buat mapping store berdasarkan view_uid
             const storeMap = {};
