@@ -62,8 +62,7 @@ function chunk(arr, n) {
     return result;
 }
 
-/** Sumber toko yang valid */
-const VALID_SOURCES = ['uwarung', 'makanan', 'rental', 'carteran'];
+const VALID_SOURCES = ['uwarung', 'makanan', 'rental', 'carteran', 'penginapan'];
 
 /** Normalisasi query source -> salah satu dari VALID_SOURCES (default uwarung) */
 function normalizeSource(source) {
