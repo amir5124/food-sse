@@ -17,7 +17,7 @@ const MAKANAN_COMPONENT_UID = '618637dbc8415';  // Jastip Makanan - daftar toko
 const RENTAL_COMPONENT_UID = '6a859e9887f7e';   // Rental - daftar toko rental
 const CARTERAN_COMPONENT_UID = '6a861898ae6a5';  // Carteran - daftar toko carteran
 const PENGINAPAN_COMPONENT_UID = '6a8964a0debde';
-const JASTIP_INDOMARET_UID = '6a8964a0debde';
+const JASTIP_INDOMARET_UID = '6a8cf1d3859b6';
 const CODENAME = 'iknlinku';
 const BATCH_SIZE = 3; // jumlah toko per batch SSE
 
