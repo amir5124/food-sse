@@ -17,6 +17,7 @@ const MAKANAN_COMPONENT_UID = '618637dbc8415';  // Jastip Makanan - daftar toko
 const RENTAL_COMPONENT_UID = '6a859e9887f7e';   // Rental - daftar toko rental
 const CARTERAN_COMPONENT_UID = '6a861898ae6a5';  // Carteran - daftar toko carteran
 const PENGINAPAN_COMPONENT_UID = '6a8964a0debde';
+const JASTIP_INDOMARET_UID = '6a8964a0debde';
 const CODENAME = 'iknlinku';
 const BATCH_SIZE = 3; // jumlah toko per batch SSE
 
@@ -62,7 +63,7 @@ function chunk(arr, n) {
     return result;
 }
 
-const VALID_SOURCES = ['uwarung', 'makanan', 'rental', 'carteran', 'penginapan'];
+const VALID_SOURCES = ['uwarung', 'makanan', 'rental', 'carteran', 'penginapan', 'indomaret'];
 
 /** Normalisasi query source -> salah satu dari VALID_SOURCES (default uwarung) */
 function normalizeSource(source) {
@@ -76,6 +77,7 @@ function resolveComponentUid(source) {
         case 'rental': return RENTAL_COMPONENT_UID;
         case 'carteran': return CARTERAN_COMPONENT_UID;
         case 'penginapan': return PENGINAPAN_COMPONENT_UID;
+        case 'indomaret': return JASTIP_INDOMARET_UID;
         default: return UWARUNG_COMPONENT_UID;
     }
 }
@@ -1121,12 +1123,13 @@ app.get('/api/discounts', async (req, res) => {
             console.log(`🔍 Fetching products with discounts...`);
 
             // Ambil semua toko dari ketiga component (uwarung, makanan, rental)
-        const uwarungStores = await fetchAllStoresFromComponent(UWARUNG_COMPONENT_UID);
-const makananStores = await fetchAllStoresFromComponent(MAKANAN_COMPONENT_UID);
-const rentalStores = await fetchAllStoresFromComponent(RENTAL_COMPONENT_UID);
-const carteranStores = await fetchAllStoresFromComponent(CARTERAN_COMPONENT_UID);
-const penginapanStores = await fetchAllStoresFromComponent(PENGINAPAN_COMPONENT_UID);
-const allStores = [...uwarungStores, ...makananStores, ...rentalStores, ...carteranStores, ...penginapanStores];
+            const uwarungStores = await fetchAllStoresFromComponent(UWARUNG_COMPONENT_UID);
+            const makananStores = await fetchAllStoresFromComponent(MAKANAN_COMPONENT_UID);
+            const rentalStores = await fetchAllStoresFromComponent(RENTAL_COMPONENT_UID);
+            const carteranStores = await fetchAllStoresFromComponent(CARTERAN_COMPONENT_UID);
+            const penginapanStores = await fetchAllStoresFromComponent(PENGINAPAN_COMPONENT_UID);
+            const indomaretStores = await fetchAllStoresFromComponent(JASTIP_INDOMARET_UID);
+            const allStores = [...uwarungStores, ...makananStores, ...rentalStores, ...carteranStores, ...penginapanStores, ...indomaretStores];
 
             // Buat mapping store berdasarkan view_uid
             const storeMap = {};
