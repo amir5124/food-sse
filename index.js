@@ -19,6 +19,16 @@ const CARTERAN_COMPONENT_UID = '6a861898ae6a5';  // Carteran - daftar toko carte
 const PENGINAPAN_COMPONENT_UID = '6a8964a0debde';
 const JASTIP_INDOMARET_UID = '6a8cf1d3859b6';
 const JASTIP_ALFAMART_UID = '6a8cf1f91cbcb';
+const JASTIP_BUAH_UID = '6a8efbe39a23d';
+const JASTIP_DIY_UID = '6a8efcc5e1fb6';
+const JASTIP_OLEH_OLEH_UID = '6a8efce95bc20';
+const JASTIP_KUE_UID = '6a8efe617b2ca';
+const JASTIP_FROZEN_UID = '6a8efe9875801';
+const JASTIP_ATK_UID = '6a8efeb413574';
+const JASTIP_BANGUNAN_UID = '6a8efec89ce28';
+const JASTIP_PERABOT_UID = '6a8efeeb30155';
+const JASTIP_PETSHOP_UID = '6a8eff39442d7';
+const JASTIP_MAXI_UID = '6a8efca2b54b4';
 const CODENAME = 'iknlinku';
 const BATCH_SIZE = 3; // jumlah toko per batch SSE
 
@@ -64,7 +74,7 @@ function chunk(arr, n) {
     return result;
 }
 
-const VALID_SOURCES = ['uwarung', 'makanan', 'rental', 'carteran', 'penginapan', 'indomaret', 'alfamart'];
+const VALID_SOURCES = ['uwarung', 'makanan', 'rental', 'carteran', 'penginapan', 'indomaret', 'alfamart','buah','diy','oleh','kue','frozen','atk','bangunan','perabot','petshop','maxi'];
 
 /** Normalisasi query source -> salah satu dari VALID_SOURCES (default uwarung) */
 function normalizeSource(source) {
@@ -80,6 +90,16 @@ function resolveComponentUid(source) {
         case 'penginapan': return PENGINAPAN_COMPONENT_UID;
         case 'indomaret': return JASTIP_INDOMARET_UID;
         case 'alfamart': return JASTIP_ALFAMART_UID;
+        case 'buah': return JASTIP_BUAH_UID;
+        case 'diy': return JASTIP_DIY_UID;
+        case 'oleh': return JASTIP_OLEH_OLEH_UID;
+        case 'kue': return JASTIP_KUE_UID;
+        case 'frozen': return JASTIP_FROZEN_UID;
+        case 'atk': return JASTIP_ATK_UID;
+        case 'bangunan': return JASTIP_BANGUNAN_UID;
+         case 'perabot': return JASTIP_PERABOT_UID;
+          case 'petshop': return JASTIP_PETSHOP_UID;
+           case 'maxi': return JASTIP_MAXI_UID;
         default: return UWARUNG_COMPONENT_UID;
     }
 }
@@ -1132,7 +1152,17 @@ app.get('/api/discounts', async (req, res) => {
             const penginapanStores = await fetchAllStoresFromComponent(PENGINAPAN_COMPONENT_UID);
             const indomaretStores = await fetchAllStoresFromComponent(JASTIP_INDOMARET_UID);
             const alfamartStores = await fetchAllStoresFromComponent(JASTIP_ALFAMART_UID);
-            const allStores = [...uwarungStores, ...makananStores, ...rentalStores, ...carteranStores, ...penginapanStores, ...indomaretStores, ...alfamartStores];
+             const buahStores = await fetchAllStoresFromComponent(JASTIP_BUAH_UID);
+              const diyStores = await fetchAllStoresFromComponent(JASTIP_DIY_UID);
+               const olehStores = await fetchAllStoresFromComponent(JASTIP_OLEH_OLEH_UID);
+                const kueStores = await fetchAllStoresFromComponent(JASTIP_KUE_UID);
+                 const frozenStores = await fetchAllStoresFromComponent(JASTIP_FROZEN_UID);
+                  const atkStores = await fetchAllStoresFromComponent(JASTIP_ATK_UID);
+                   const bangunanStores = await fetchAllStoresFromComponent(JASTIP_BANGUNAN_UID);
+                    const perabotStores = await fetchAllStoresFromComponent(JASTIP_PERABOT_UID);
+                      const petshopStores = await fetchAllStoresFromComponent(JASTIP_PETSHOP_UID);
+                        const maxiStores = await fetchAllStoresFromComponent(JASTIP_MAXI_UID);
+            const allStores = [...uwarungStores, ...makananStores, ...rentalStores, ...carteranStores, ...penginapanStores, ...indomaretStores, ...alfamartStores, ...buahStores, ...diyStores, ...olehStores, ...kueStores, ...frozenStores, ...atkStores, ...bangunanStores, ...perabotStores, ...petshopStores, ...maxiStores];
 
             // Buat mapping store berdasarkan view_uid
             const storeMap = {};
