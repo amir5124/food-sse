@@ -30,6 +30,7 @@ const JASTIP_PERABOT_UID = '6a8efeeb30155';
 const JASTIP_PETSHOP_UID = '6a8eff39442d7';
 const JASTIP_MAXI_UID = '6a8efca2b54b4';
 const JASTIP_FOOD_UID = '6a8fef1cae336';
+const JASTIP_WARUNG_UID = '6a8efc8561f0e';
 const CODENAME = 'iknlinku';
 const BATCH_SIZE = 3; // jumlah toko per batch SSE
 
@@ -75,7 +76,7 @@ function chunk(arr, n) {
     return result;
 }
 
-const VALID_SOURCES = ['uwarung', 'makanan', 'rental', 'carteran', 'penginapan', 'indomaret', 'alfamart', 'buah', 'diy', 'oleh', 'kue', 'frozen', 'atk', 'bangunan', 'perabot', 'petshop', 'maxi','food'];
+const VALID_SOURCES = ['uwarung', 'makanan', 'rental', 'carteran', 'penginapan', 'indomaret', 'alfamart', 'buah', 'diy', 'oleh', 'kue', 'frozen', 'atk', 'bangunan', 'perabot', 'petshop', 'maxi', 'food', 'warung'];
 
 /** Normalisasi query source -> salah satu dari VALID_SOURCES (default uwarung) */
 function normalizeSource(source) {
@@ -101,7 +102,8 @@ function resolveComponentUid(source) {
         case 'perabot': return JASTIP_PERABOT_UID;
         case 'petshop': return JASTIP_PETSHOP_UID;
         case 'maxi': return JASTIP_MAXI_UID;
-         case 'food': return JASTIP_FOOD_UID;
+        case 'food': return JASTIP_FOOD_UID;
+        case 'warung': return JASTIP_WARUNG_UID;
         default: return UWARUNG_COMPONENT_UID;
     }
 }
@@ -1164,8 +1166,9 @@ app.get('/api/discounts', async (req, res) => {
             const perabotStores = await fetchAllStoresFromComponent(JASTIP_PERABOT_UID);
             const petshopStores = await fetchAllStoresFromComponent(JASTIP_PETSHOP_UID);
             const maxiStores = await fetchAllStoresFromComponent(JASTIP_MAXI_UID);
-             const foodStores = await fetchAllStoresFromComponent(JASTIP_FOOD_UID);
-            const allStores = [...uwarungStores, ...makananStores, ...rentalStores, ...carteranStores, ...penginapanStores, ...indomaretStores, ...alfamartStores, ...buahStores, ...diyStores, ...olehStores, ...kueStores, ...frozenStores, ...atkStores, ...bangunanStores, ...perabotStores, ...petshopStores, ...maxiStores, ...foodStores];
+            const foodStores = await fetchAllStoresFromComponent(JASTIP_FOOD_UID);
+             const warungStores = await fetchAllStoresFromComponent(JASTIP_WARUNG_UID);
+            const allStores = [...uwarungStores, ...makananStores, ...rentalStores, ...carteranStores, ...penginapanStores, ...indomaretStores, ...alfamartStores, ...buahStores, ...diyStores, ...olehStores, ...kueStores, ...frozenStores, ...atkStores, ...bangunanStores, ...perabotStores, ...petshopStores, ...maxiStores, ...foodStores, ...warungStores];
 
             // Buat mapping store berdasarkan view_uid
             const storeMap = {};
