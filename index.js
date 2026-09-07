@@ -32,6 +32,7 @@ const JASTIP_MAXI_UID = '6a8efca2b54b4';
 const JASTIP_FOOD_UID = '6a8fef1cae336';
 const JASTIP_WARUNG_UID = '6a8efc8561f0e';
 const JASTIP_APOTEK_UID = '61888b919f524';
+const USEND_UID = '6a9e0c3ca7df5';
 const CODENAME = 'iknlinku';
 const BATCH_SIZE = 3; // jumlah toko per batch SSE
 
@@ -67,7 +68,7 @@ const jagelHeaders = {
     'Origin': 'https://app.linku.co.id',
     'Referer': 'https://app.linku.co.id/',
     'Accept': 'application/json',
-    'Authorization': 'Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjRhNDc5ZDU2N2E4N2ZjOTljMWExZjUyZDQ0NTk3NzgyNjVjNmE1NjRjZTg3NTQ1ZDEzMjkxYmQ0YzJkZjFlZTY1NTJmMGU3NjJlMDAyOTMyIn0.eyJhdWQiOiIxIiwianRpIjoiNGE0NzlkNTY3YTg3ZmM5OWMxYTFmNTJkNDQ1OTc3ODI2NWM2YTU2NGNlODc1NDVkMTMyOTFiZDRjMmRmMWVlNjU1MmYwZTc2MmUwMDI5MzIiLCJpYXQiOjE3ODQ2ODg4MzAsIm5iZiI6MTc4NDY4ODgzMCwiZXhwIjoxODE2MjI0ODMwLCJzdWIiOiIyOTcxODQ0Iiwic2NvcGVzIjpbXX0.XrNiE7QXo53bAtTzyxQMTQjs9mUqXy7YHY4IrFqUV3rEqbs4JsbnT9dImUxXPn8iqG8QHuiGRmWWVDA1KqbrKoHNf5yeJMKIUH-lwfXRHlL4m00naghEoZRHcOZmd4_BlP_C_hQQ4pYsDAZ0-Yy3KurawzOkaAzlYprY7R_lwUROSjDjNpVbT9y65Fk-8RzjuvIItDtE6DG94HdrPD4K_wKkpzrCcSkbuGM_UNhW6O27rsWEu41HoiXcn3m_51JX0FPBSmlprAvx3xxhIY-RXUp9YJN6Zq1bbxBdEeSPRbvQJj94FGOk9fluJ8R-esJGf691OdGEYYwRlkMTzanQ5diuQJeSjENvcV88iI1DZJP3Z82onIS18hgocbN9W7nR_L-24aVhz0UZBSDcPanT8kpJz4f5EmYVd2Rnd8wKLrQ8YjBC4ffMZhk1CJpV4bRuClPJFUKrvKEHjhE1dkOSmFu8sKbt3sk2CZrBivE4e0qqXWLPWrZ2VxTf1y_2dpLhy-IMTkgm0k1diTSqqp_y6PcM-qJjSStfGnWuWxuhj503z0jGukbcfukX1E00U3qcCvf8E4RUDaO4zNOMvhgLBn_puIAoYVn4PMyQSy6LCOMNP6bGlC1k6eNRep4TTaLl3wRw0q_QqP_1n_An23k8BHlnqkuBKTiGRuRCtnssTtc' // token lengkap
+    'Authorization': 'Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6ImI0N2Q5ODgyNTQxZWMxOTkyODIwNzIzMDQyYTdjMGQ4NjRhMTdhMjY2ZWUwOGNhZjQzZTNjZmI4ZmM4NzY5ZTBlMmNlYmZiNThjODM4ZjdmIn0.eyJhdWQiOiIxIiwianRpIjoiYjQ3ZDk4ODI1NDFlYzE5OTI4MjA3MjMwNDJhN2MwZDg2NGExN2EyNjZlZTA4Y2FmNDNlM2NmYjhmYzg3NjllMGUyY2ViZmI1OGM4MzhmN2YiLCJpYXQiOjE3ODM4MjU0NTgsIm5iZiI6MTc4MzgyNTQ1OCwiZXhwIjoxODE1MzYxNDU4LCJzdWIiOiIyOTcxODQ0Iiwic2NvcGVzIjpbXX0.NMzd62aceCALSr4UemUmq6fp88uS1Ux4zoWiKPJV1XPQkjCv-4eaLdhmPh039LH0gEjEK2Y61mB3635MVs5rsE1SECu4U6awJ1ZKcOezNENJnfo2-N6gVKd2yQEt-F6780gJykFEHf0hopKfDyRTkCXGmpz-_WZlIOpKwGQ1xosbiBs8N3IxMBxwgRBj2PrTrfbxfv9m7ic9HCY-LnezbOKGaNVAKNr53ml6S1XbowSV8oyNfu83G1y0v8OsX7wkmpsWj53-UK_lxVB0xwQZvIA6wN4DTkTVW3GsYSbW3M0DxvbG2YpEZGxQ8j-J-R4SieAMG7nIWxXBbvTMHcxOcexMDEBqnEPqfrso2_xXg9OSplW2Dk0rsTL7XcAJ3rb6ohRQ8V8ULhHEVbR2G_6HRDp7lQ5VMOaUfW_AtqReTecdbOctPEM42pyoVZIbgEyCm4nfdorDWSdc6nNpGF0uKLXZFNk5SZx_SEjt03iYlaUzm6CzYzCBfZR8WnQVbltjJ7EWdEzp4nuag_R7KZYagAIRrFjw7FbrX4PfWfNDRyV0ZYYD33naGERaxmlgUfymsUuXZVXDQUvAYfAPiyJ35-Qoxkeo2yvx-pzk9YnTgIGlFgsV3-u3-mmE92yFaz7nB5Ky7LdifmRcen3F0bTnKyTljQXgaivVrwe7Kxe7a1U' // token lengkap
 };
 
 /** Bagi array menjadi chunk ukuran n */
@@ -77,7 +78,7 @@ function chunk(arr, n) {
     return result;
 }
 
-const VALID_SOURCES = ['uwarung', 'makanan', 'rental', 'carteran', 'penginapan', 'indomaret', 'alfamart', 'buah', 'diy', 'oleh', 'kue', 'frozen', 'atk', 'bangunan', 'perabot', 'petshop', 'maxi', 'food', 'warung', 'apotek'];
+const VALID_SOURCES = ['uwarung', 'makanan', 'rental', 'carteran', 'penginapan', 'indomaret', 'alfamart', 'buah', 'diy', 'oleh', 'kue', 'frozen', 'atk', 'bangunan', 'perabot', 'petshop', 'maxi', 'food', 'warung', 'apotek', 'usend'];
 
 /** Normalisasi query source -> salah satu dari VALID_SOURCES (default uwarung) */
 function normalizeSource(source) {
@@ -106,6 +107,7 @@ function resolveComponentUid(source) {
         case 'food': return JASTIP_FOOD_UID;
         case 'warung': return JASTIP_WARUNG_UID;
         case 'apotek': return JASTIP_APOTEK_UID;
+        case 'usend': return USEND_UID;
         default: return UWARUNG_COMPONENT_UID;
     }
 }
@@ -1171,7 +1173,8 @@ app.get('/api/discounts', async (req, res) => {
             const foodStores = await fetchAllStoresFromComponent(JASTIP_FOOD_UID);
             const warungStores = await fetchAllStoresFromComponent(JASTIP_WARUNG_UID);
             const apotekStores = await fetchAllStoresFromComponent(JASTIP_APOTEK_UID);
-            const allStores = [...uwarungStores, ...makananStores, ...rentalStores, ...carteranStores, ...penginapanStores, ...indomaretStores, ...alfamartStores, ...buahStores, ...diyStores, ...olehStores, ...kueStores, ...frozenStores, ...atkStores, ...bangunanStores, ...perabotStores, ...petshopStores, ...maxiStores, ...foodStores, ...warungStores, ...apotekStores];
+            const usendStores = await fetchAllStoresFromComponent(USEND_UID);
+            const allStores = [...uwarungStores, ...makananStores, ...rentalStores, ...carteranStores, ...penginapanStores, ...indomaretStores, ...alfamartStores, ...buahStores, ...diyStores, ...olehStores, ...kueStores, ...frozenStores, ...atkStores, ...bangunanStores, ...perabotStores, ...petshopStores, ...maxiStores, ...foodStores, ...warungStores, ...apotekStores, ...usendStores];
 
             // Buat mapping store berdasarkan view_uid
             const storeMap = {};
